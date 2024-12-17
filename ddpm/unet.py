@@ -283,7 +283,7 @@ class ResidualBlock(nn.Module):
         # 3 加上残差连接的输入x（经过通道数调整，如果需要的话）
         out = self.conv_2(out) + self.residual_connection(x)
         # 如果使用了注意力机制，则将输出通过注意力模块进行处理
-        out = self.attention(out)
+        out = self.attention(out)  # 部分残差块有attention
 
         return out
 

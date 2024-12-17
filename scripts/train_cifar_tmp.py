@@ -100,8 +100,8 @@ def create_argparser():
         model_checkpoint=None,  # 预训练权重路径
         optim_checkpoint=None,  # 预训练优化器路径
 
-        schedule_low=1e-4,
-        schedule_high=0.02,
+        schedule_low=1e-4,  # 控制beta范围： low=args.schedule_low * 1000 / args.num_timesteps,
+        schedule_high=0.02,  # high=args.schedule_high * 1000 / args.num_timesteps,
 
         device=device,
     )
