@@ -89,16 +89,16 @@ def get_diffusion_from_args(args):
     model = UNet(
         img_channels=3,
 
-        base_channels=args.base_channels,
-        channel_mults=args.channel_mults,
-        time_emb_dim=args.time_emb_dim,
-        norm=args.norm,
-        dropout=args.dropout,
-        activation=activations[args.activation],
-        attention_resolutions=args.attention_resolutions,
+        base_channels=args.base_channels,  # 128 第一个卷积输出通道数
+        channel_mults=args.channel_mults,  # (1,2,2,2) 每个layer输出的通道数的倍率. Default: (1, 2, 4, 8)
+        time_emb_dim=args.time_emb_dim,  # 512 time embedding dimension or None if the block doesn't use time conditioning. Default: None
+        norm=args.norm,   # gn which normalization to use (instance, group, batch, or none). Default: "gn"
+        dropout=args.dropout,  # 0.1
+        activation=activations[args.activation],  # silu
+        attention_resolutions=args.attention_resolutions,   # 1 表示第1个layer设置了attention. Default: ()
 
-        num_classes=None if not args.use_labels else 10,
-        initial_pad=0,
+        num_classes=None if not args.use_labels else 10,  # train: false/true
+        initial_pad=0,  # 对开始输入图片的宽度或者高度不是2的倍数的，进行padding. Default: 0
     )
 
     if args.schedule == "cosine":
