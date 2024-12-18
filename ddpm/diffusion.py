@@ -46,7 +46,7 @@ class GaussianDiffusion(nn.Module):
         # 保存传入的用于估计扩散噪声的模型（通常是像UNet这样的网络结构），后续在正向扩散、反向去噪等操作中会用到该模型进行计算
         self.model = model
         # 通过深拷贝传入的模型，创建一个用于指数移动平均（EMA）的模型副本，EMA可以让模型权重在训练过程中更平滑地更新，避免剧烈波动
-        self.ema_model = deepcopy(model)
+        self.ema_model = deepcopy(model)  # 创建一个与原始模型结构相同但参数独立
 
         # 创建EMA实例，用于管理模型权重的指数移动平均更新过程，传入ema_decay参数来指定权重更新的衰减率
         self.ema = EMA(ema_decay)
@@ -84,14 +84,14 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer("reciprocal_sqrt_alphas", to_torch(np.sqrt(1 / alphas)))
 
         self.register_buffer("remove_noise_coeff", to_torch(betas / np.sqrt(1 - alphas_cumprod)))
-        self.register_buffer("sigma", to_torch(np.sqrt(betas)))
+        self.register_buffer("sigma", to_torch(np.sqrt(betas)))  # sigma也是时间步数
 
     # 更新扩散模型的指数移动平均（Exponential Moving Average，EMA）相关参数（如果模型中有此机制）
     def update_ema(self):
         self.step += 1
         # 按照设定的更新频率（ema_update_rate）来更新指数移动平均模型的权重
         if self.step % self.ema_update_rate == 0:
-            # 在开始阶段（步数小于ema_start），直接将当前模型的权重复制给ema_model
+            # 在开始阶段（步数小于ema_start），直接将当前模型的权重复制给ema_model，共享权重
             if self.step < self.ema_start:
                 self.ema_model.load_state_dict(self.model.state_dict())
             else:
@@ -101,8 +101,16 @@ class GaussianDiffusion(nn.Module):
     # 推理
     @torch.no_grad()
     def remove_noise(self, x, t, y, use_ema=True):
-        if use_ema:
-            return (
+        """
+        x: (b,3,h,w) 待去噪的批数据
+        t: (b,) 时间步
+        y: None
+        use_ema: True
+        """
+        if use_ema:  # 使用了ema
+            return (  # extract之后得到(b,1,1,1)系数，是每张图片，当前时间步数t的系数
+                        # x.shape(b,3,h,w), t(b,), 输出噪声(b,3,h,w)
+                        # (b,1,1,1) * (b,3,h,w)
                     (x - extract(self.remove_noise_coeff, t, x.shape) * self.ema_model(x, t, y)) *
                     extract(self.reciprocal_sqrt_alphas, t, x.shape)
             )
@@ -118,12 +126,12 @@ class GaussianDiffusion(nn.Module):
         if y is not None and batch_size != len(y):
             raise ValueError("sample batch size different from length of given y")
 
-        # 从标准正态分布中采样生成初始的噪声数据，形状为(batch_size, img_channels, *img_size)
-        x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)  # (b,3,h,w)
+        # 从标准正态分布中采样生成初始的噪声数据，形状为(b,3,h,w)
+        x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
 
         # 从总时间步数（num_timesteps - 1）开始，倒序循环到0，逐步进行去噪采样过程
         for t in range(self.num_timesteps - 1, -1, -1):
-            t_batch = torch.tensor([t], device=device).repeat(batch_size)
+            t_batch = torch.tensor([t], device=device).repeat(batch_size)  # (b,)，里面的值都是t，t值是时间步数
             x = self.remove_noise(x, t_batch, y, use_ema)
 
             if t > 0:
@@ -175,14 +183,14 @@ class GaussianDiffusion(nn.Module):
         # 加噪noise
         perturbed_x = self.perturb_x(x, t, noise)
 
-        # 估计噪声
+        # unet模型估计噪声perturbed_x(b,3,h,w), b(b,). estimated_noise(b,3,h,w)
         estimated_noise = self.model(perturbed_x, t, y)
 
         # 计算估计噪声和真实噪声的l2距离
         if self.loss_type == "l1":
             loss = F.l1_loss(estimated_noise, noise)
         elif self.loss_type == "l2":
-            loss = F.mse_loss(estimated_noise, noise)
+            loss = F.mse_loss(estimated_noise, noise)  # estimated_noise(b,3,h,w), noise(b,3,h,w)
 
         return loss
 
@@ -195,7 +203,7 @@ class GaussianDiffusion(nn.Module):
         if w != self.img_size[0]:
             raise ValueError("image width does not match diffusion parameters")
 
-        # 随机从标准正态分布区间[0,1000)里面随机采样base_channels个整数作为时间步数
+        # 随机从标准正态分布区间[0,1000)里面随机采样batch_size个整数作为时间步数
         t = torch.randint(0, self.num_timesteps, (b,), device=device)  # (128,)
         return self.get_losses(x, t, y)
 
@@ -218,5 +226,6 @@ def generate_cosine_schedule(T, s=0.008):
     return np.array(betas)
 
 
+# 论文中用的是这个
 def generate_linear_schedule(T, low, high):
     return np.linspace(low, high, T)
