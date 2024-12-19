@@ -22,6 +22,11 @@ def cycle(dl):
 def get_transform():
     class RescaleChannels(object):
         def __call__(self, sample):
+            """
+            sample: (c,h,w) 传入的sample是经过ToTensor操作，变成值范围是[0,1]的tensor，这里是把范围变成[-1,1]
+            """
+            # 对输入的图像数据进行通道缩放操作，将每个像素点的值进行线性变换，乘以2再减去1，
+            # 目的是将图像数据的像素值范围从常见的 [0, 1] 转换到 [-1, 1]，
             return 2 * sample - 1
 
     return torchvision.transforms.Compose([
